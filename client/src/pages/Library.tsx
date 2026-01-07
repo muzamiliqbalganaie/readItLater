@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, Plus, Trash2, Clock } from 'lucide-react';
+import { Loader2, Search, Plus, Trash2, Clock, User } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import ContentInput from '@/components/ContentInput';
 import { Document } from '@/types';
+import { useLocation } from 'wouter';
 
 interface LibraryPageProps {
   onSelectDocument: (doc: Document) => void;
@@ -17,6 +18,7 @@ export default function Library({ onSelectDocument }: LibraryPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   const { data: documents, isLoading, refetch } = trpc.documents.list.useQuery();
   const { data: tags } = trpc.tags.list.useQuery();
@@ -46,13 +48,23 @@ export default function Library({ onSelectDocument }: LibraryPageProps) {
         <div className="max-w-6xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-3xl font-bold text-gray-900">My Reading List</h1>
-            <Button
-              onClick={() => setShowInput(!showInput)}
-              className="flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Content
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => navigate('/profile')}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <User className="w-4 h-4" />
+                Profile
+              </Button>
+              <Button
+                onClick={() => setShowInput(!showInput)}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Content
+              </Button>
+            </div>
           </div>
 
           {/* Search Bar */}

@@ -1,7 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, documents, InsertDocument, highlights, InsertHighlight, notes, InsertNote, tags, InsertTag } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  InsertUser,
+  users,
+  documents,
+  InsertDocument,
+  highlights,
+  InsertHighlight,
+  notes,
+  InsertNote,
+  tags,
+  InsertTag,
+  documentTags,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -56,8 +68,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -84,7 +96,11 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -101,7 +117,9 @@ export async function getUserDocuments(userId: number) {
 export async function getDocumentById(documentId: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(documents)
+  const result = await db
+    .select()
+    .from(documents)
     .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
@@ -114,17 +132,40 @@ export async function createDocument(doc: InsertDocument) {
   return result;
 }
 
-export async function updateDocument(documentId: number, userId: number, updates: Partial<InsertDocument>) {
+export async function updateDocument(
+  documentId: number,
+  userId: number,
+  updates: Partial<InsertDocument>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.update(documents).set(updates)
+  return db
+    .update(documents)
+    .set(updates)
     .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
 }
 
 export async function deleteDocument(documentId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.delete(documents)
+
+  // First, verify the document belongs to the user
+  const doc = await getDocumentById(documentId, userId);
+  if (!doc) throw new Error("Document not found or access denied");
+
+  // Delete related records first (to avoid foreign key constraint errors)
+  // Delete highlights
+  await db.delete(highlights).where(eq(highlights.documentId, documentId));
+
+  // Delete notes
+  await db.delete(notes).where(eq(notes.documentId, documentId));
+
+  // Delete document tags
+  await db.delete(documentTags).where(eq(documentTags.documentId, documentId));
+
+  // Finally, delete the document
+  return db
+    .delete(documents)
     .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
 }
 
@@ -134,7 +175,10 @@ export async function deleteDocument(documentId: number, userId: number) {
 export async function getDocumentHighlights(documentId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(highlights).where(eq(highlights.documentId, documentId));
+  return db
+    .select()
+    .from(highlights)
+    .where(eq(highlights.documentId, documentId));
 }
 
 export async function createHighlight(highlight: InsertHighlight) {
@@ -146,7 +190,8 @@ export async function createHighlight(highlight: InsertHighlight) {
 export async function deleteHighlight(highlightId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.delete(highlights)
+  return db
+    .delete(highlights)
     .where(and(eq(highlights.id, highlightId), eq(highlights.userId, userId)));
 }
 
@@ -165,17 +210,24 @@ export async function createNote(note: InsertNote) {
   return db.insert(notes).values(note);
 }
 
-export async function updateNote(noteId: number, userId: number, content: string) {
+export async function updateNote(
+  noteId: number,
+  userId: number,
+  content: string
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.update(notes).set({ content })
+  return db
+    .update(notes)
+    .set({ content })
     .where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
 }
 
 export async function deleteNote(noteId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.delete(notes)
+  return db
+    .delete(notes)
     .where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
 }
 
@@ -197,6 +249,7 @@ export async function createTag(tag: InsertTag) {
 export async function deleteTag(tagId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.delete(tags)
+  return db
+    .delete(tags)
     .where(and(eq(tags.id, tagId), eq(tags.userId, userId)));
 }

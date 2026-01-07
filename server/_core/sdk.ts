@@ -24,8 +24,8 @@ export type SessionPayload = {
   name: string;
 };
 
-const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
-const GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
+const EXCHANGE_TOKEN_PATH = `/oauth/token`;
+const GET_USER_INFO_PATH = `/userinfo`;
 const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
 
 class OAuthService {
@@ -47,28 +47,36 @@ class OAuthService {
     code: string,
     state: string
   ): Promise<ExchangeTokenResponse> {
-    const payload: ExchangeTokenRequest = {
-      clientId: ENV.appId,
-      grantType: "authorization_code",
+    const payload = {
+      client_id: ENV.appId,
+      grant_type: "authorization_code",
       code,
-      redirectUri: this.decodeState(state),
+      redirect_uri: this.decodeState(state),
+      client_secret: ENV.auth0ClientSecret,
     };
 
-    const { data } = await this.client.post<ExchangeTokenResponse>(
-      EXCHANGE_TOKEN_PATH,
-      payload
-    );
+    const { data } = await this.client.post(EXCHANGE_TOKEN_PATH, payload);
 
-    return data;
+    // Transform Auth0's snake_case response to camelCase
+    return {
+      accessToken: data.access_token,
+      tokenType: data.token_type,
+      expiresIn: data.expires_in,
+      refreshToken: data.refresh_token,
+      scope: data.scope,
+      idToken: data.id_token || "",
+    };
   }
 
   async getUserInfoByToken(
     token: ExchangeTokenResponse
   ): Promise<GetUserInfoResponse> {
-    const { data } = await this.client.post<GetUserInfoResponse>(
+    const { data } = await this.client.get<GetUserInfoResponse>(
       GET_USER_INFO_PATH,
       {
-        accessToken: token.accessToken,
+        headers: {
+          Authorization: `Bearer ${token.accessToken}`,
+        },
       }
     );
 
@@ -134,12 +142,20 @@ class SDKServer {
     const data = await this.oauthService.getUserInfoByToken({
       accessToken,
     } as ExchangeTokenResponse);
+
     const loginMethod = this.deriveLoginMethod(
       (data as any)?.platforms,
       (data as any)?.platform ?? data.platform ?? null
     );
+
+    // Map Auth0's 'sub' field to 'openId'
+    const openId = (data as any)?.sub || (data as any)?.openId;
+
     return {
-      ...(data as any),
+      openId,
+      projectId: (data as any)?.projectId || "",
+      name: (data as any)?.name || "",
+      email: (data as any)?.email,
       platform: loginMethod,
       loginMethod,
     } as GetUserInfoResponse;
